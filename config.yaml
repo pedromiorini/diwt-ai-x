@@ -1,0 +1,10 @@
+experiment:
+  ethical_threshold: -0.5
+  phi_threshold: 0.1
+  hidden_size: 16
+  prob_repro: 0.15
+  input_size_simple: 5
+  input_size_minigrid: 147
+  max_energy: 120.0
+  min_energy: 0.0
+  n_calls_optimization: 20

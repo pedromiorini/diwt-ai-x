@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+experiment.log
+pipeline_execution*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Outputs (manter apenas estrutura)
+experiments/*/
+!experiments/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
