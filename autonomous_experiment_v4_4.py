@@ -322,7 +322,7 @@ class ExperimentRunner:
         beta, alpha, lambda_val = self.optimize_hyperparameters()
         logger.info(f"Optimized: beta={beta:.2f}, alpha={alpha:.2f}, lambda={lambda_val:.2f}")
         
-        env = gym.make("MiniGrid-MultiRoom-N6-S4-v0") if use_minigrid else list(ENV_CONFIG['simple_env'].keys())
+        env = gym.make("MiniGrid-MultiRoom-N2-S4-v0") if use_minigrid else list(ENV_CONFIG['simple_env'].keys())
         input_size = CONFIG['input_size_minigrid'] if use_minigrid else CONFIG['input_size_simple']
         seres = [AgentBody(f"O{i+1}", NeuralModel(input_size, CONFIG['hidden_size']), beta, alpha, lambda_val) for i in range(self.n_initial)]
         
@@ -556,38 +556,38 @@ header-includes:
 ---
 
 # Abstract
-This study advances the DIWT-AI X framework, validating the Gradient of Intrinsic Valence (GVI), Proto-Intentionality Emergent Layer (CPIE), and Integrated Information (\\( \\Phi^* \\)) in an autonomous, self-regulating ecosystem. Using RNN-based organisms (N=16, population={{ n_initial }}), we achieved a mean \\( V_{\\text{norm}} \\) of {{ analysis.summary.mean_V_norm | round(2) }} ± {{ analysis.summary.std_V_norm | round(2) }} and mean \\( \\Phi^* \\) of {{ analysis.summary.mean_phi | round(2) }} ± {{ analysis.summary.std_phi | round(2) }}. Survival rate was {{ (analysis.summary.survival_rate * 100) | round(1) }}%. Significant increases in \\( V_{\\text{norm}} \\) (p = {{ analysis.t_test_V.p_value | round(4) }}) and \\( \\Phi^* \\) (p = {{ analysis.t_test_phi.p_value | round(4) }}) validate the framework. The pipeline optimizes \\( \\beta, \\alpha, \\lambda \\) via Bayesian optimization and ensures ethical compliance.
+This study advances the DIWT-AI X framework, validating the Gradient of Intrinsic Valence (GVI), Proto-Intentionality Emergent Layer (CPIE), and Integrated Information ($\\Phi^*$) in an autonomous, self-regulating ecosystem. Using RNN-based organisms (N=16, population={{ n_initial }}), we achieved a mean $V_{\\text{norm}}$ of {{ analysis.summary.mean_V_norm | round(2) }} ± {{ analysis.summary.std_V_norm | round(2) }} and mean $\\Phi^*$ of {{ analysis.summary.mean_phi | round(2) }} ± {{ analysis.summary.std_phi | round(2) }}. Survival rate was {{ (analysis.summary.survival_rate * 100) | round(1) }}%. Significant increases in $V_{\\text{norm}}$ (p = {{ analysis.t_test_V.p_value | round(4) }}) and $\\Phi^*$ (p = {{ analysis.t_test_phi.p_value | round(4) }}) validate the framework. The pipeline optimizes $\\beta, \\alpha, \\lambda$ via Bayesian optimization and ensures ethical compliance.
 
 # 1. Introduction
-The DIWT-AI X theory posits consciousness as emergent from recursive causal loops with high integrated information (\\( \\Phi^* \\)) and intrinsic valence (\\( V_{\\text{norm}} \\)). The GVI is:
-\\[ V_{\\text{norm}}(S) = \\tanh\\left(\\beta \\left[ -\\widehat{H}(S) + \\alpha \\widehat{I}(S) - V_0 \\right]\\right) \\]
-where \\( \\widehat{H}(S) \\) uses MINE, and \\( \\widehat{I}(S) \\) is tripartite. The CPIE is:
-\\[ J = \\lambda \\cdot V_{\\text{norm}}(S) - (1 - \\lambda) \\cdot \\widehat{E}_p \\]
-This paper presents an autonomous pipeline with \\( \\Phi^* \\) estimation and PPO/DQN benchmarks.
+The DIWT-AI X theory posits consciousness as emergent from recursive causal loops with high integrated information ($\\Phi^*$) and intrinsic valence ($V_{\\text{norm}}$). The GVI is:
+$$V_{\\text{norm}}(S) = \\tanh\\left(\\beta \\left[ -\\widehat{H}(S) + \\alpha \\widehat{I}(S) - V_0 \\right]\\right)$$
+where $\\widehat{H}(S)$ uses MINE, and $\\widehat{I}(S)$ is tripartite. The CPIE is:
+$$J = \\lambda \\cdot V_{\\text{norm}}(S) - (1 - \\lambda) \\cdot \\widehat{E}_p$$
+This paper presents an autonomous pipeline with $\\Phi^*$ estimation and PPO/DQN benchmarks.
 
 # 2. Methods
 ## 2.1 Simulation Setup
 - **Ecosystem**: {{ analysis.summary.n_events }} events across {{ analysis.summary.total_steps }} steps, with {{ n_initial }} organisms.
 - **Actions**: {{ '7 (MiniGrid)' if use_minigrid else 'Rest, explore, react, ignore, share, attack' }}.
-- **Optimization**: Bayesian optimization of \\( \\beta \\) ({{ beta | round(2) }}), \\( \\alpha \\) ({{ alpha | round(2) }}), \\( \\lambda \\) ({{ lambda_val | round(2) }}).
-- **Metrics**: \\( V_{\\text{norm}} \\), \\( \\Phi^* \\) (proxy via eigenvalues), tripartite integrity.
+- **Optimization**: Bayesian optimization of $\\beta$ ({{ beta | round(2) }}), $\\alpha$ ({{ alpha | round(2) }}), $\\lambda$ ({{ lambda_val | round(2) }}).
+- **Metrics**: $V_{\\text{norm}}$, $\\Phi^*$ (proxy via eigenvalues), tripartite integrity.
 {% if use_minigrid and analysis.summary.benchmarks is defined %}- **Benchmarks**: PPO and DQN trained for 50,000 timesteps (mean rewards: PPO {{ analysis.summary.benchmarks.ppo_mean | round(2) }}, DQN {{ analysis.summary.benchmarks.dqn_mean | round(2) }}).{% endif %}
 
 ## 2.2 Data Analysis
-- **Statistical Tests**: Welch's t-test on \\( V_{\\text{norm}} \\) and \\( \\Phi^* \\).
-- **Visualization**: Trajectories of energy, \\( V_{\\text{norm}} \\), \\( \\Phi^* \\).
+- **Statistical Tests**: Welch's t-test on $V_{\\text{norm}}$ and $\\Phi^*$.
+- **Visualization**: Trajectories of energy, $V_{\\text{norm}}$, $\\Phi^*$.
 
 ## 2.3 Ethical Safeguards
-- Pause if \\( V_{\\text{norm}} < {{ ethical_threshold }} \\) or \\( \\Phi^* < {{ phi_threshold }} \\) for 10 steps.
+- Pause if $V_{\\text{norm}} < {{ ethical_threshold }}$ or $\\Phi^* < {{ phi_threshold }}$ for 10 steps.
 - Immutable logs in {{ outdir }}.
 - Slack alerts for anomalies.
 
 # 3. Results
 - **Mean Energy**: {{ analysis.summary.mean_energy | round(2) }} ± {{ analysis.summary.std_energy | round(2) }}
-- **Mean \\( V_{\\text{norm}} \\)**: {{ analysis.summary.mean_V_norm | round(2) }} ± {{ analysis.summary.std_V_norm | round(2) }}
-- **Mean \\( \\Phi^* \\)**: {{ analysis.summary.mean_phi | round(2) }} ± {{ analysis.summary.std_phi | round(2) }}
+- **Mean $V_{\\text{norm}}$**: {{ analysis.summary.mean_V_norm | round(2) }} ± {{ analysis.summary.std_V_norm | round(2) }}
+- **Mean $\\Phi^*$**: {{ analysis.summary.mean_phi | round(2) }} ± {{ analysis.summary.std_phi | round(2) }}
 - **Survival Rate**: {{ (analysis.summary.survival_rate * 100) | round(1) }}%
-- **Statistical Tests**: \\( V_{\\text{norm}} \\): t = {{ analysis.t_test_V.t_stat | round(2) }}, p = {{ analysis.t_test_V.p_value | round(4) }}; \\( \\Phi^* \\): t = {{ analysis.t_test_phi.t_stat | round(2) }}, p = {{ analysis.t_test_phi.p_value | round(4) }}
+- **Statistical Tests**: $V_{\\text{norm}}$: t = {{ analysis.t_test_V.t_stat | round(2) }}, p = {{ analysis.t_test_V.p_value | round(4) }}; $\\Phi^*$: t = {{ analysis.t_test_phi.t_stat | round(2) }}, p = {{ analysis.t_test_phi.p_value | round(4) }}
 {% if use_minigrid and analysis.summary.benchmarks is defined %}- **Benchmarks**: CPIE vs PPO p = {{ analysis.summary.benchmarks.t_test_cpie_ppo | round(4) }}; CPIE vs DQN p = {{ analysis.summary.benchmarks.t_test_cpie_dqn | round(4) }}{% endif %}
 
 \\begin{table}[h]
@@ -607,10 +607,10 @@ Action & Count \\\\
 ![Temporal Trajectories]({{ analysis.timeseries_plot }})
 
 # 4. Discussion
-Significant increases in \\( V_{\\text{norm}} \\) and \\( \\Phi^* \\) validate GVI and CPIE. {% if use_minigrid and analysis.summary.benchmarks is defined %}CPIE outperforms PPO (p = {{ analysis.summary.benchmarks.t_test_cpie_ppo | round(4) }}) and DQN (p = {{ analysis.summary.benchmarks.t_test_cpie_dqn | round(4) }}). {% endif %}Optimized parameters enhanced cooperation ({{ analysis.action_counts.get('compartilhar', 0) }}) and exploration ({{ analysis.action_counts.get('explorar', 0) }}). Limitations include computational scale. Future work will scale to N=50 and neuromorphic hardware.
+Significant increases in $V_{\\text{norm}}$ and $\\Phi^*$ validate GVI and CPIE. {% if use_minigrid and analysis.summary.benchmarks is defined %}CPIE outperforms PPO (p = {{ analysis.summary.benchmarks.t_test_cpie_ppo | round(4) }}) and DQN (p = {{ analysis.summary.benchmarks.t_test_cpie_dqn | round(4) }}). {% endif %}Optimized parameters enhanced cooperation ({{ analysis.action_counts.get('compartilhar', 0) }}) and exploration ({{ analysis.action_counts.get('explorar', 0) }}). Limitations include computational scale. Future work will scale to N=50 and neuromorphic hardware.
 
 # 5. Limitations
-The \\( \\Phi^* \\) metric used is a proxy based on the maximum eigenvalue of the correlation matrix, normalized by the number of neurons. The true integrated information (\\( \\Phi \\)) is computationally intractable for large systems, as noted by Tononi (2008). Future work will explore alternative approximations.
+The $\\Phi^*$ metric used is a proxy based on the maximum eigenvalue of the correlation matrix, normalized by the number of neurons. The true integrated information ($\\Phi$) is computationally intractable for large systems, as noted by Tononi (2008). Future work will explore alternative approximations.
 
 # 6. Conclusion
 The DIWT-AI X pipeline is a robust platform for consciousness research, ready for complex environments and higher-level modules (MAC, SME, MME).
@@ -650,7 +650,7 @@ def generate_article(outdir, events_file, analysis, ethical_threshold, phi_thres
         try:
             subprocess.run(["pandoc", md_path, "-o", tex_path, "--standalone", "--pdf-engine=xelatex"], check=True)
             logger.info(f"Saved article LaTeX to {tex_path}")
-            subprocess.run(["pandoc", md_path, "-o", pdf_path, "--pdf-engine=xelatex"], check=True)
+            subprocess.run(["pandoc", md_path, "-o", pdf_path, "--pdf-engine=xelatex", "-V", "CJKmainfont=DejaVu Sans"], check=True)
             logger.info(f"Saved article PDF to {pdf_path}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.warning(f"Failed to generate LaTeX/PDF: {e}. Falling back to MD.")
