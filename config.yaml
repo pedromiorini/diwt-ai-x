@@ -1,6 +1,6 @@
 experiment:
   ethical_threshold: -0.5
-  phi_threshold: 0.1
+  phi_threshold: 0.0
   hidden_size: 16
   prob_repro: 0.15
   input_size_simple: 5
