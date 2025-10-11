@@ -650,7 +650,7 @@ def generate_article(outdir, events_file, analysis, ethical_threshold, phi_thres
         try:
             subprocess.run(["pandoc", md_path, "-o", tex_path, "--standalone", "--pdf-engine=xelatex"], check=True)
             logger.info(f"Saved article LaTeX to {tex_path}")
-            subprocess.run(["pandoc", md_path, "-o", pdf_path, "--pdf-engine=xelatex", "-V", "CJKmainfont=DejaVu Sans"], check=True)
+            subprocess.run(["pandoc", md_path, "-o", pdf_path, "--pdf-engine=xelatex"], check=True)
             logger.info(f"Saved article PDF to {pdf_path}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.warning(f"Failed to generate LaTeX/PDF: {e}. Falling back to MD.")
