@@ -34,9 +34,13 @@ from skopt import gp_minimize
 from skopt.space import Real
 # from minepy import MINE  # Removido devido a problemas de compatibilidade com Python 3.11
 from scipy.stats import entropy as scipy_entropy
-import gym
-import gym_minigrid
+import gymnasium as gym
+import minigrid
+
+from minigrid.wrappers import ImgObsWrapper
 from stable_baselines3 import PPO, DQN
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from gymnasium import spaces
 from jinja2 import Template
 import jsonlines
 import yaml
@@ -64,11 +68,38 @@ with open('config.yaml', 'r') as f:
 with open('environment_config.json', 'r') as f:
     ENV_CONFIG = json.load(f)
 
+class MinigridFeaturesExtractor(BaseFeaturesExtractor):
+    """
+    Custom CNN para MiniGrid (7x7x3).
+    Baseado na arquitetura Tiny-CNN de Stable-Baselines3 para MiniGrid.
+    """
+    def __init__(self, observation_space: spaces.Box, features_dim: int = 128):
+        super().__init__(observation_space, features_dim)
+        n_input_channels = observation_space.shape[0]
+        self.cnn = nn.Sequential(
+            nn.Conv2d(n_input_channels, 16, 2, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, 2, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 2, stride=1),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        # Computa o tamanho da saída do CNN para o layer linear
+        with torch.no_grad():
+            n_flatten = self.cnn(torch.as_tensor(observation_space.sample()[None]).float()).shape[1]
+
+        self.linear = nn.Sequential(nn.Linear(n_flatten, features_dim), nn.ReLU())
+
+    def forward(self, observations: torch.Tensor) -> torch.Tensor:
+        return self.linear(self.cnn(observations))
+
 class NeuralModel(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(NeuralModel, self).__init__()
-        self.rnn = nn.RNN(input_size, hidden_size, batch_first=True)
-        self.fc = nn.Linear(hidden_size, input_size if input_size == 5 else 7)
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 7 if input_size > 5 else 6)
         if input_size > 5:
             self.cnn = nn.Sequential(
                 nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),
@@ -79,8 +110,8 @@ class NeuralModel(nn.Module):
             self.fc_adapt = nn.Linear(16 * 4 * 4, input_size)
         self.optimizer = optim.Adam(self.parameters(), lr=0.001)
 
-    def forward(self, x):
-        out, hidden = self.rnn(x)
+    def forward(self, x, hidden_state=None):
+        out, hidden = self.lstm(x, hidden_state)
         return self.fc(out), hidden
 
 class AgentBody:
@@ -94,7 +125,7 @@ class AgentBody:
         self.alpha = alpha
         self.lambda_val = lambda_val
         self.genes = genes or {k: random.uniform(0.5, 1.5) for k in ["descansar", "explorar", "reagir", "ignorar", "compartilhar", "atacar"]}
-        self.input_size = neural_model.rnn.input_size
+        self.input_size = neural_model.lstm.input_size
 
     def perceber(self, ambiente):
         try:
@@ -181,44 +212,69 @@ class AgentBody:
             logger.error(f"Erro em compute_phi_proxy ({self.nome})")
             return 0.0
 
-    def decidir(self, estimulo, hidden_states):
+    def decidir(self, estimulo, hidden_state=None):
         if not self.vivo:
-            return 0 if self.neural_model.fc.out_features == 7 else "nenhuma"
+            return 0 if self.neural_model.fc.out_features == 7 else "nenhuma", hidden_state
         if self.energia <= 20:
-            return 3 if self.neural_model.fc.out_features == 7 else "descansar"
+            return 3 if self.neural_model.fc.out_features == 7 else "descansar", hidden_state
         try:
             x = torch.tensor([self.env_to_vector(estimulo)], dtype=torch.float32).unsqueeze(0)
-            pred, hidden = self.neural_model(x)
+            
+            # Inicializa hidden_state se for None
+            if hidden_state is None:
+                hidden_state = (
+                    torch.zeros(1, 1, self.neural_model.lstm.hidden_size),
+                    torch.zeros(1, 1, self.neural_model.lstm.hidden_size),
+                )
+            
+            pred, hidden = self.neural_model(x, hidden_state)
+            
+            # O hidden retornado é (h_n, c_n). Usamos h_n para o cálculo de V
+            h_n = hidden[0].detach().numpy()
+            
             E_p = -torch.log_softmax(pred, dim=-1).mean().item()
-            V = self.valence_norm(hidden.detach().numpy())
+            V = self.valence_norm(h_n)
+            
             J = self.lambda_val * V - (1 - self.lambda_val) * E_p
             loss = torch.tensor(-J, requires_grad=True)
             self.neural_model.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.neural_model.parameters(), 1.0)
             self.neural_model.optimizer.step()
+            
             acoes = list(range(self.neural_model.fc.out_features))
             probs = torch.softmax(pred, dim=-1).detach().numpy().flatten()
             probs = np.clip(probs, 1e-8, 1.0)
             probs /= probs.sum()
             acao_idx = np.random.choice(acoes, p=probs)
             if self.neural_model.fc.out_features == 7:
-                return acao_idx
-            acoes_simples = ["descansar", "explorar", "reagir", "ignorar", "compartilhar", "atacar", "nenhuma"]
-            return acoes_simples[acao_idx] if acao_idx < len(acoes_simples) else "nenhuma"
-        except Exception as e:
-            logger.error(f"Erro em decidir ({self.nome}): {e}")
-            return 0 if self.neural_model.fc.out_features == 7 else "nenhuma"
+                return acao_idx, hidden
+            # Ambiente simples (6 ações)
+            acoes_simples = ["descansar", "explorar", "reagir", "ignorar", "compartilhar", "atacar"]
+            return acoes_simples[acao_idx] if acao_idx < len(acoes_simples) else "nenhuma", hidden            logger.error(f"Erro em decidir ({self.nome}): {e}")
+            return 0 if self.neural_model.fc.out_features == 7 else "nenhuma", hidden_state
 
-    def agir(self, estimulo, acao, outros, optimizer, environment=None):
+    def agir(self, estimulo, acao, outros, optimizer, environment=None, hidden_state=None):
         energia_inicial = self.energia
         log = {"acao": acao, "delta": 0.0, "alvo": None, "V_norm": 0.0, "phi": 0.0}
         try:
             x = torch.tensor([self.env_to_vector(estimulo)], dtype=torch.float32).unsqueeze(0)
-            pred, hidden = self.neural_model(x)
-            hidden_np = hidden.detach().numpy()
+            
+            # Inicializa hidden_state se for None
+            if hidden_state is None:
+                hidden_state = (
+                    torch.zeros(1, 1, self.neural_model.lstm.hidden_size),
+                    torch.zeros(1, 1, self.neural_model.lstm.hidden_size),
+                )
+            
+            pred, hidden = self.neural_model(x, hidden_state)
+            
+            # O hidden retornado é (h_n, c_n). Usamos h_n para o cálculo de V
+            h_n = hidden[0].detach().numpy()
+            hidden_np = h_n
             log["V_norm"] = self.valence_norm(hidden_np)
             log["phi"] = self.compute_phi_proxy(hidden_np)
+            
             if isinstance(environment, list):
                 if acao == "descansar":
                     self.energia += 10.0
@@ -243,7 +299,8 @@ class AgentBody:
                         log["alvo"] = alvo.nome
             else:
                 if hasattr(environment, 'step'):
-                    obs, reward, done, _ = environment.step(acao)
+                    obs, reward, terminated, truncated, info = environment.step(acao)
+                    done = terminated or truncated
                     self.energia += reward * 10.0
                     log["reward"] = reward
                     self.obs = obs
@@ -300,20 +357,20 @@ class ExperimentRunner:
         )
         return res.x[0], res.x[1], res.x[2]
 
-    def process_agent_decision(self, s, env, outros):
+    def process_agent_decision(self, s, env, outros, hidden_state=None):
         try:
             estimulo = s.perceber(env)
-            acao = s.decidir(estimulo, s.memoria)
-            return s, estimulo, acao
+            acao, new_hidden_state = s.decidir(estimulo, hidden_state)
+            return s, estimulo, acao, new_hidden_state
         except Exception as e:
             logger.error(f"Erro em process_agent_decision ({s.nome}): {e}")
             return s, None, None
 
-    def process_agent_action(self, s, estimulo, acao, outros, env, use_minigrid, t=0):
+    def process_agent_action(self, s, estimulo, acao, outros, env, use_minigrid, hidden_state, t=0):
         try:
-            log, hidden, next_estimulo = s.agir(estimulo, acao, outros, None, env if use_minigrid else None)
+            log, new_hidden_state, next_estimulo = s.agir(estimulo, acao, outros, None, env if use_minigrid else None, hidden_state)
             filho = s.reproduzir(t * len(outros) + outros.index(s) if s in outros else 0, CONFIG['prob_repro'])
-            return log, hidden, next_estimulo, filho
+            return log, new_hidden_state, next_estimulo, filho
         except Exception as e:
             logger.error(f"Erro em process_agent_action ({s.nome}): {e}")
             return {"acao": None, "delta": 0.0, "alvo": None, "V_norm": 0.0, "phi": 0.0}, None, estimulo, None
@@ -322,15 +379,25 @@ class ExperimentRunner:
         beta, alpha, lambda_val = self.optimize_hyperparameters()
         logger.info(f"Optimized: beta={beta:.2f}, alpha={alpha:.2f}, lambda={lambda_val:.2f}")
         
-        env = gym.make("MiniGrid-MultiRoom-N2-S4-v0") if use_minigrid else list(ENV_CONFIG['simple_env'].keys())
+        if use_minigrid:
+            env = gym.make("MiniGrid-MultiRoom-N2-S4-v0")
+            env = ImgObsWrapper(env)
+        else:
+            env = list(ENV_CONFIG['simple_env'].keys())
         input_size = CONFIG['input_size_minigrid'] if use_minigrid else CONFIG['input_size_simple']
         seres = [AgentBody(f"O{i+1}", NeuralModel(input_size, CONFIG['hidden_size']), beta, alpha, lambda_val) for i in range(self.n_initial)]
         
         if use_minigrid:
-            ppo = PPO("CnnPolicy", env, verbose=0).learn(total_timesteps=50000)
-            dqn = DQN("CnnPolicy", env, verbose=0).learn(total_timesteps=50000)
-        else:
-            ppo, dqn = None, None
+            policy_kwargs = dict(
+                features_extractor_class=MinigridFeaturesExtractor,
+                features_extractor_kwargs=dict(features_dim=128),
+            )
+            policy_kwargs = dict(
+                features_extractor_class=MinigridFeaturesExtractor,
+                features_extractor_kwargs=dict(features_dim=128),
+            )
+            ppo = PPO("CnnPolicy", env, verbose=0, policy_kwargs=policy_kwargs).learn(total_timesteps=50000, progress_bar=True)
+            dqn = DQN("CnnPolicy", env, verbose=0, policy_kwargs=policy_kwargs).learn(total_timesteps=50000, progress_bar=True)
         
         events_file = os.path.join(self.outdir, f"{run_id}_events.jsonl")
         with jsonlines.open(events_file, mode='w') as writer:
@@ -343,13 +410,18 @@ class ExperimentRunner:
                     break
 
                 # Processar decisões sequencialmente (evitar multiprocessing aninhado)
-                decisions = [self.process_agent_decision(s, env, vivos) for s in vivos]
+                # Manter um dicionário de estados ocultos para cada agente
+                if 'hidden_states' not in locals():
+                    hidden_states = {s.nome: None for s in vivos}
 
-                for s, estimulo, acao in decisions:
+                decisions = [self.process_agent_decision(s, env, vivos, hidden_states.get(s.nome)) for s in vivos]
+
+                for s, estimulo, acao, new_hidden_state_decision in decisions:
                     if acao is None:
                         continue
                     outros = [o for o in vivos if o is not s]
-                    log, hidden, next_estimulo, filho = self.process_agent_action(s, estimulo, acao, outros, env, use_minigrid, t)
+                    log, new_hidden_state_action, next_estimulo, filho = self.process_agent_action(s, estimulo, acao, outros, env, use_minigrid, new_hidden_state_decision, t)
+                    hidden_states[s.nome] = new_hidden_state_action
                     if filho:
                         seres.append(filho)
                         log["reproducao"] = filho.nome
@@ -376,14 +448,32 @@ class ExperimentRunner:
             if use_minigrid:
                 cpie_rewards = []
                 for _ in range(100):
-                    obs = env.reset()
+                    obs, info = env.reset()
                     done = False
                     while not done:
                         acao = seres[0].decidir(obs, []) if seres[0].vivo else 0
-                        obs, reward, done, _ = env.step(acao)
+                        obs, reward, terminated, truncated, info = env.step(acao)
+                        if terminated or truncated:
+                            done = True
+                            cpie_rewards.append(reward)
+                            break
+                        # Se não terminou, a recompensa é 0 (recompensa esparsa)
                         cpie_rewards.append(reward)
-                ppo_rewards = [env.step(ppo.predict(env.reset())[0])[1] for _ in range(100)]
-                dqn_rewards = [env.step(dqn.predict(env.reset())[0])[1] for _ in range(100)]
+                
+                # Benchmarks PPO/DQN
+                ppo_rewards = []
+                for _ in range(100):
+                    obs, info = env.reset()
+                    action, _ = ppo.predict(obs, deterministic=True)
+                    obs, reward, terminated, truncated, info = env.step(action)
+                    ppo_rewards.append(reward)
+                dqn_rewards = []
+                for _ in range(100):
+                    obs, info = env.reset()
+                    action, _ = dqn.predict(obs, deterministic=True)
+                    obs, reward, terminated, truncated, info = env.step(action)
+                    dqn_rewards.append(reward)
+                
                 snapshot["benchmarks"] = {
                     "cpie_mean": np.mean(cpie_rewards),
                     "ppo_mean": np.mean(ppo_rewards),
